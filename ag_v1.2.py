@@ -1,4 +1,4 @@
-from itertools import permutations
+
 import random, math
 
 def dic_posicoes(dado: str) -> dict[int, tuple[float, float]]:
