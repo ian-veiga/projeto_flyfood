@@ -40,17 +40,16 @@ def aptidao_individuo(caminho: list[int], coordenadas: dict[int, tuple[float, fl
         distancia += math.sqrt((delta_x ** 2) + (delta_y ** 2))
         i += 1
     
-    return round(distancia, 4)
+    return round(distancia, 4)**-1
 
 def aptidao(populacao: list[list[int]], coordenadas) -> list[float]:
-    """calculando a aptidao de uma populacao"""
+    """calculando as aptidoes de uma populacao"""
     aptidao_populacao: list[float] = [0] * len(populacao)
 
     for i, ind in enumerate(populacao):
         aptidao_populacao[i] = aptidao_individuo(ind, coordenadas)
 
     return aptidao_populacao
-
 
 def pmx(pai1: list[int], pai2: list[int]) -> tuple[list[int], list[int]]:
     """Partially Mapped Crossover (PMX) adaptado para o TSP"""
@@ -89,7 +88,6 @@ def pmx(pai1: list[int], pai2: list[int]) -> tuple[list[int], list[int]]:
 
     return filho1, filho2
 
-
 def cruzamento(populacao: list[list[int]], taxa_cruzamento: float) -> list[list[int]]:
     """Gerar a nova população apos o cruzamento"""
     nova_populacao = []
@@ -124,23 +122,137 @@ def mutacao_individuo(filho: list[int], taxa_mutacao: float) -> str:
 
     return filho_mutado
 
-def mutacao(filhos: list[str], taxa_mutacao: float) -> list[str]:
+def mutacao(filhos: list[str], taxa_mutacao: float) -> list[list[int]]:
     """Mutação de todos os filhos"""
-    for i, ind in enumerate(filhos):
-        filhos[i] = mutacao_individuo(ind, taxa_mutacao)
-    return filhos
+    return [
+        [int(gene) for gene in mutacao_individuo(filho, taxa_mutacao)] if random.random()<= taxa_mutacao else [int(gene) for gene in filho]
+        for filho in filhos
+
+    ]
+
+def elite_individuo(geracao, coordenadas, n_elite):
+    melhores_individuos = []
+    melhores_aptidao = []
+    
+
+    for individuo in geracao:
+        aptidao_atual = aptidao_individuo(individuo, coordenadas)
+        if len(melhores_individuos) < n_elite:
+            melhores_individuos.append(individuo)
+            melhores_aptidao.append(aptidao_atual)
+        else:
+            pior_idx = 0
+            for i in range(1, len(melhores_individuos)):
+                if melhores_aptidao[i] > melhores_aptidao[pior_idx]:
+                    pior_idx = i
+            if aptidao_atual < melhores_aptidao[pior_idx]:
+                melhores_individuos[pior_idx] = individuo
+                melhores_aptidao[pior_idx] = aptidao_atual
+    
+    return melhores_individuos
+
+def torneio(geracao: list[list[int]], coordenadas: dict[int, tuple[float, float]]) -> list[list[int]]:
+    """Seleciona sobreviventes usando torneio e elitismo."""
+    sobreviventes = []
+    pressao_sel = random.uniform(0.01, 0.03)  # Pressão seletiva de 1% a 3%
+    n_elite = int(len(geracao) * pressao_sel)
+    n_aleat_sobrev = 50 - n_elite
+    # Selecionar a elite
+    melhores_individuos = elite_individuo(geracao, coordenadas, n_elite)    
+    sobreviventes += melhores_individuos 
+    # Selecionar os indivíduos restantes via torneio
+    for _ in range(n_aleat_sobrev):
+        competidores = random.sample(geracao, k=3)  # Seleciona 3 indivíduos aleatórios para o torneio
+        melhor = competidores[0]
+        melhor_aptidao = aptidao_individuo(melhor, coordenadas)
+        for competidor in competidores[1:]:
+            aptidao_competidor = aptidao_individuo(competidor, coordenadas)
+            if aptidao_competidor < melhor_aptidao:
+                melhor = competidor
+                melhor_aptidao = aptidao_competidor
+        sobreviventes.append(melhor)
+
+    return sobreviventes
+
+def selecao_sobreviventes(
+        pop: list[list[int]], 
+        apt: list[float], 
+        filhos: list[list[int]], 
+        apt_filhos: list[float]
+) -> tuple[list[list[int]], list[float]]:
+    nova_populacao = pop + filhos
+    nova_aptidao = apt + apt_filhos
+    sobreviventes_indices = list(range(len(pop)))
+
+    for i in range(len(pop), len(nova_populacao)):
+        pior_idx = sobreviventes_indices[0] 
+        
+        for j in sobreviventes_indices[1:]:
+            if nova_aptidao[j] > nova_aptidao[pior_idx]:
+                pior_idx = j
+        
+        if nova_aptidao[i] < nova_aptidao[pior_idx]:
+            sobreviventes_indices[sobreviventes_indices.index(pior_idx)] = i
+    
+    return ([nova_populacao[i] for i in sobreviventes_indices],
+            [nova_aptidao[i] for i in sobreviventes_indices])
+
+def imprimir_populacao(pop: list[list[int]], apt: list[float], geracao: int) -> None:
+    """Imprime cada população e suas aptidoes e também o melhor individuo"""
+    for ind, apt_ in zip(pop, apt):
+        print(f"genótipo: {ind}, aptidão: {apt_}")
+    print(
+        f"Melhor solução da geracao {geracao} é {pop[apt.index(max(apt))]} e sua aptidão é {max(apt)}"
+    )
+    print("*****************************")
+
+def evolucao(
+    tam_pop: int,
+    semente: int,
+    taxa_cruzamento: float,
+    taxa_mutacao: float,
+    n_geracoes: int,
+    torneio_func: callable,
+    coordenadas: dict[int, tuple[float, float]]
+) -> tuple[list[list[int]], list[float]]:
+    """Algoritmo genético"""
+    
+    pop = pop_inicial(tam_pop, semente)
+    apt = aptidao(pop, coordenadas) 
+    
+    for geracao in range(n_geracoes):
+        imprimir_populacao(pop, apt, geracao)
+        
+        pais = torneio_func(pop, coordenadas)
+        
+        filhos = cruzamento(pais, taxa_cruzamento)
+        
+        filhos = mutacao(filhos, taxa_mutacao)
+        
+        apt_filhos = aptidao(filhos, coordenadas)
+        
+        pop, apt = selecao_sobreviventes(pop, apt, filhos, apt_filhos)
+    
+    return pop, apt
 
 
 def main():
     dado = 'berlin52.tsp'
     coordenadas = dic_posicoes(dado)
-    print(coordenadas)
-    print()
-    qtd_pop = 10000
-    semente = 15
-    popul = pop_inicial(qtd_pop, semente)
-    print(min(aptidao(popul, coordenadas)))
+    semente = 10
+    taxa_cruzamento = 0.9
+    taxa_mutacao = 0.1
+    n_geracoes = 50
+    tam_pop = 251
+    torneio_func = torneio
+    pop, apt = evolucao(
+         tam_pop, semente, taxa_cruzamento, taxa_mutacao, n_geracoes, torneio_func, coordenadas
+    )
+    melhor_aptidao = max(apt)
+    print(
+        f"\n\n>>>Melhor solução encontrada é {pop[apt.index(melhor_aptidao)]} com função objetivo de {melhor_aptidao**-1}\n\n"
+    )
     
-
-main()
+if __name__ == "__main__":
+    main()
 
