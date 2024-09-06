@@ -1,4 +1,5 @@
 import random, math
+import numpy as np
 
 def dic_posicoes(dado: str) -> dict[int, tuple[float, float]]:
     """Criar um dicinario das posicoes """
@@ -21,7 +22,7 @@ def pop_inicial(tam_pop: int, semente: int | float | bytes | bytearray) -> list[
     random.seed(semente)
 
     for _ in range(tam_pop):
-        caminho_rand = list(range(1, 52))
+        caminho_rand = list(range(1, 53))
         random.shuffle(caminho_rand)
         caminhos.append(caminho_rand)
     
@@ -40,7 +41,7 @@ def aptidao_individuo(caminho: list[int], coordenadas: dict[int, tuple[float, fl
         distancia += math.sqrt((delta_x ** 2) + (delta_y ** 2))
         i += 1
     
-    return round(distancia, 4)**-1
+    return round(distancia, 4)
 
 def aptidao(populacao: list[list[int]], coordenadas) -> list[float]:
     """calculando as aptidoes de uma populacao"""
@@ -122,7 +123,7 @@ def mutacao_individuo(filho: list[int], taxa_mutacao: float) -> str:
 
     return filho_mutado
 
-def mutacao(filhos: list[str], taxa_mutacao: float) -> list[list[int]]:
+def mutacao(filhos: list[list[int]], taxa_mutacao: float) -> list[list[int]]:
     """Mutação de todos os filhos"""
     return [
         [int(gene) for gene in mutacao_individuo(filho, taxa_mutacao)] if random.random()<= taxa_mutacao else [int(gene) for gene in filho]
@@ -150,17 +151,21 @@ def elite_individuo(geracao, coordenadas, n_elite):
                 melhores_aptidao[pior_idx] = aptidao_atual
     
     return melhores_individuos
-
+def selecao_pais(pop: list[str], apt: list[float], sel_func: callable) -> list[str]:
+    """Seleção dos pais"""
+    lista_pais: list[str] = [None] * len(pop)
+    for i in range(len(pop)):
+        idx_selecionado = sel_func(apt)
+        lista_pais[i] = pop[idx_selecionado]
+    return lista_pais
 def torneio(geracao: list[list[int]], coordenadas: dict[int, tuple[float, float]]) -> list[list[int]]:
     """Seleciona sobreviventes usando torneio e elitismo."""
     sobreviventes = []
-    pressao_sel = random.uniform(0.01, 0.03)  # Pressão seletiva de 1% a 3%
+    pressao_sel = random.uniform(0.01, 0.03)  
     n_elite = int(len(geracao) * pressao_sel)
     n_aleat_sobrev = 50 - n_elite
-    # Selecionar a elite
     melhores_individuos = elite_individuo(geracao, coordenadas, n_elite)    
     sobreviventes += melhores_individuos 
-    # Selecionar os indivíduos restantes via torneio
     for _ in range(n_aleat_sobrev):
         competidores = random.sample(geracao, k=3)  # Seleciona 3 indivíduos aleatórios para o torneio
         melhor = competidores[0]
@@ -198,11 +203,8 @@ def selecao_sobreviventes(
             [nova_aptidao[i] for i in sobreviventes_indices])
 
 def imprimir_populacao(pop: list[list[int]], apt: list[float], geracao: int) -> None:
-    """Imprime cada população e suas aptidoes e também o melhor individuo"""
-    for ind, apt_ in zip(pop, apt):
-        print(f"genótipo: {ind}, aptidão: {apt_}")
     print(
-        f"Melhor solução da geracao {geracao} é {pop[apt.index(max(apt))]} e sua aptidão é {max(apt)}"
+        f"Melhor solução da geracao {geracao} é {pop[apt.index(min(apt))]} e sua aptidão é {min(apt)}"
     )
     print("*****************************")
 
@@ -216,9 +218,10 @@ def evolucao(
     coordenadas: dict[int, tuple[float, float]]
 ) -> tuple[list[list[int]], list[float]]:
     """Algoritmo genético"""
-    
     pop = pop_inicial(tam_pop, semente)
     apt = aptidao(pop, coordenadas) 
+    melhor_aptidao_global = min(apt)
+    melhor_individuo_global = pop[apt.index(melhor_aptidao_global)]
     
     for geracao in range(n_geracoes):
         imprimir_populacao(pop, apt, geracao)
@@ -232,27 +235,42 @@ def evolucao(
         apt_filhos = aptidao(filhos, coordenadas)
         
         pop, apt = selecao_sobreviventes(pop, apt, filhos, apt_filhos)
+        melhor_aptidao_geracao = min(apt)
+        
+        if melhor_aptidao_geracao < melhor_aptidao_global:
+            melhor_aptidao_global = melhor_aptidao_geracao
+            melhor_individuo_global = pop[apt.index(melhor_aptidao_global)]
+     
     
-    return pop, apt
+    return pop, apt,melhor_individuo_global,melhor_aptidao_geracao
 
 
 def main():
     dado = 'berlin52.tsp'
     coordenadas = dic_posicoes(dado)
-    semente = 10
-    taxa_cruzamento = 0.9
-    taxa_mutacao = 0.1
-    n_geracoes = 50
-    tam_pop = 251
+    semente = 11
+    taxa_cruzamento = 0.75
+    taxa_mutacao = 0.05
+    n_geracoes = 100
+    tam_pop = 100
     torneio_func = torneio
-    pop, apt = evolucao(
-         tam_pop, semente, taxa_cruzamento, taxa_mutacao, n_geracoes, torneio_func, coordenadas
-    )
-    melhor_aptidao = max(apt)
+    pop , apt, melhor_individuo_global, melhor_aptidao_global = evolucao(tam_pop, semente, taxa_cruzamento, taxa_mutacao, n_geracoes, torneio_func, coordenadas)
+    
     print(
-        f"\n\n>>>Melhor solução encontrada é {pop[apt.index(melhor_aptidao)]} com função objetivo de {melhor_aptidao**-1}\n\n"
+        f"\n\n>>>Melhor solução encontrada é {melhor_individuo_global} com distancia de {(melhor_aptidao_global)}\n\n"
     )
     
+    dict_results = {"semente" : semente,
+                    "taxa_de_cruzamento" : taxa_cruzamento,
+                    "taxa_de_mutacao" : taxa_mutacao,
+                    "tamanho_da_populacao" : tam_pop,
+                    "numero_de_geracoes" : n_geracoes,
+                    "melhor_individuo" : melhor_individuo_global,
+                    "melhor_aptidao" : melhor_aptidao_global
+                    }
+
+    np.savez("arquivo", dict_results)
+
 if __name__ == "__main__":
     main()
 
