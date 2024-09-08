@@ -1,8 +1,12 @@
-import random, math
-import numpy as np
+from random import uniform, random, randint, seed
+from math import sqrt
+from typing import Any
+from numpy import savez, array
+from time import time
+import sys
 
 def dic_posicoes(dado: str) -> dict[int, tuple[float, float]]:
-    """Criar um dicinario das posicoes """
+    """Criar um dicionario das posicoes """
     try:
         with open(dado, 'r') as arquivo:
             linhas = [linha.split() for linha in arquivo.readlines()[6:58]]
@@ -16,15 +20,27 @@ def dic_posicoes(dado: str) -> dict[int, tuple[float, float]]:
 
     return coordenadas
 
+def shuffler (arr: list[int], n: int) -> list[int]:
+    """embaralha a ordem da lista de pontos"""
+    arr = array(arr)
+    for i in range(n - 1, 0, -1):
+        j = randint(0, i)
+        arr[i], arr[j] = arr[j], arr[i]
+
+    return arr.tolist()
+ 
+
 def pop_inicial(tam_pop: int, semente: int | float | bytes | bytearray) -> list[list[int]]:
-    """"""
+    """gera a população inicial com caminhos aleatorios"""
     caminhos = []
-    random.seed(semente)
+    seed(semente)
+    caminho = list(range(1,53))
+    nth = len(caminho)
 
     for _ in range(tam_pop):
-        caminho_rand = list(range(1, 53))
-        random.shuffle(caminho_rand)
-        caminhos.append(caminho_rand)
+        caminho_copia = caminho.copy()
+        caminho_shuffle = shuffler(caminho_copia, nth)
+        caminhos.append(caminho_shuffle)
     
     return caminhos
 
@@ -38,7 +54,7 @@ def aptidao_individuo(caminho: list[int], coordenadas: dict[int, tuple[float, fl
         seguinte = caminho[i + 1]
         delta_x = (coordenadas[atual][0] - coordenadas[seguinte][0])
         delta_y = (coordenadas[atual][1] - coordenadas[seguinte][1])
-        distancia += math.sqrt((delta_x ** 2) + (delta_y ** 2))
+        distancia += sqrt((delta_x ** 2) + (delta_y ** 2))
         i += 1
     
     return round(distancia, 4)
@@ -53,12 +69,12 @@ def aptidao(populacao: list[list[int]], coordenadas) -> list[float]:
     return aptidao_populacao
 
 def pmx(pai1: list[int], pai2: list[int]) -> tuple[list[int], list[int]]:
-    """Partially Mapped Crossover (PMX) adaptado para o TSP"""
+    """Partially Mapped Crossover (PMX) adaptado para o Berlin52"""
     tamanho = len(pai1)
     
     while True:
-        inicio = random.randint(0, tamanho - 1)
-        final = random.randint(0, tamanho - 1)
+        inicio = randint(0, tamanho - 1)
+        final = randint(0, tamanho - 1)
         if inicio != final:
             break
     
@@ -96,7 +112,7 @@ def cruzamento(populacao: list[list[int]], taxa_cruzamento: float) -> list[list[
     for i in range(0, len(populacao), 2):
         pai1 = populacao[i]
         pai2 = populacao[i + 1]
-        if random.random() < taxa_cruzamento:
+        if random() < taxa_cruzamento:
             filho1, filho2 = pmx(pai1, pai2)
         else:
             filho1, filho2 = pai1, pai2
@@ -109,10 +125,10 @@ def mutacao_individuo(filho: list[int], taxa_mutacao: float) -> str:
     """mutação de um individuo"""
     filho_mutado = filho.copy()
     
-    if random.random() <= taxa_mutacao:
+    if random() <= taxa_mutacao:
         while True:
-            pos1 = random.randint(0, len(filho_mutado) - 1)
-            pos2 = random.randint(0, len(filho_mutado) - 1)
+            pos1 = randint(0, len(filho_mutado) - 1)
+            pos2 = randint(0, len(filho_mutado) - 1)
             if pos1 != pos2:
                 break
         if pos1 > pos2 :
@@ -124,9 +140,9 @@ def mutacao_individuo(filho: list[int], taxa_mutacao: float) -> str:
     return filho_mutado
 
 def mutacao(filhos: list[list[int]], taxa_mutacao: float) -> list[list[int]]:
-    """Mutação de todos os filhos"""
+    """Mutação de todos os filhos caso satisfaça a taxa de mutação"""
     return [
-        [int(gene) for gene in mutacao_individuo(filho, taxa_mutacao)] if random.random()<= taxa_mutacao else [int(gene) for gene in filho]
+        [int(gene) for gene in mutacao_individuo(filho, taxa_mutacao)] if random() <= taxa_mutacao else [int(gene) for gene in filho]
         for filho in filhos
 
     ]
@@ -151,33 +167,42 @@ def elite_individuo(geracao, coordenadas, n_elite):
                 melhores_aptidao[pior_idx] = aptidao_atual
     
     return melhores_individuos
-def selecao_pais(pop: list[str], apt: list[float], sel_func: callable) -> list[str]:
-    """Seleção dos pais"""
-    lista_pais: list[str] = [None] * len(pop)
-    for i in range(len(pop)):
-        idx_selecionado = sel_func(apt)
-        lista_pais[i] = pop[idx_selecionado]
-    return lista_pais
+
 def torneio(geracao: list[list[int]], coordenadas: dict[int, tuple[float, float]]) -> list[list[int]]:
     """Seleciona sobreviventes usando torneio e elitismo."""
     sobreviventes = []
-    pressao_sel = random.uniform(0.01, 0.03)  
+    pressao_sel = uniform(0.01, 0.03)  
     n_elite = int(len(geracao) * pressao_sel)
     n_aleat_sobrev = 50 - n_elite
+    """Elitismo"""
     melhores_individuos = elite_individuo(geracao, coordenadas, n_elite)    
-    sobreviventes += melhores_individuos 
+    sobreviventes += melhores_individuos
+
+    """Torneio"""
     for _ in range(n_aleat_sobrev):
-        competidores = random.sample(geracao, k=3)  # Seleciona 3 indivíduos aleatórios para o torneio
+        competidores = [geracao[randint(0, len(geracao) - 1)] for _ in range(3)] # Seleciona 3 indivíduos aleatórios para o torneio
         melhor = competidores[0]
         melhor_aptidao = aptidao_individuo(melhor, coordenadas)
+
         for competidor in competidores[1:]:
             aptidao_competidor = aptidao_individuo(competidor, coordenadas)
             if aptidao_competidor < melhor_aptidao:
                 melhor = competidor
                 melhor_aptidao = aptidao_competidor
+        
         sobreviventes.append(melhor)
 
     return sobreviventes
+
+def valor_minimo(lista: list[Any]) -> tuple[Any, int]:
+    valor_min = sys.maxint
+
+    for valor in lista:
+        if valor < valor_min :
+            valor_min = valor
+    
+    return valor_min
+
 
 def selecao_sobreviventes(
         pop: list[list[int]], 
@@ -202,9 +227,9 @@ def selecao_sobreviventes(
     return ([nova_populacao[i] for i in sobreviventes_indices],
             [nova_aptidao[i] for i in sobreviventes_indices])
 
-def imprimir_populacao(pop: list[list[int]], apt: list[float], geracao: int) -> None:
+def imprimir_populacao(pop: list[list[int]], apt: list[float], geracao_i: int) -> None:
     print(
-        f"Melhor solução da geracao {geracao} é {pop[apt.index(min(apt))]} e sua aptidão é {min(apt)}"
+        f"Melhor solução da geracao {geracao_i} é {pop[apt.index(valor_minimo(apt))]} e sua aptidão é {valor_minimo(apt)}"
     )
     print("*****************************")
 
@@ -220,7 +245,7 @@ def evolucao(
     """Algoritmo genético"""
     pop = pop_inicial(tam_pop, semente)
     apt = aptidao(pop, coordenadas) 
-    melhor_aptidao_global = min(apt)
+    melhor_aptidao_global = valor_minimo(apt)
     melhor_individuo_global = pop[apt.index(melhor_aptidao_global)]
     
     for geracao in range(n_geracoes):
@@ -235,14 +260,14 @@ def evolucao(
         apt_filhos = aptidao(filhos, coordenadas)
         
         pop, apt = selecao_sobreviventes(pop, apt, filhos, apt_filhos)
-        melhor_aptidao_geracao = min(apt)
+        melhor_aptidao_geracao = valor_minimo(apt)
         
         if melhor_aptidao_geracao < melhor_aptidao_global:
             melhor_aptidao_global = melhor_aptidao_geracao
             melhor_individuo_global = pop[apt.index(melhor_aptidao_global)]
      
     
-    return pop, apt,melhor_individuo_global,melhor_aptidao_geracao
+    return pop, apt, melhor_individuo_global, melhor_aptidao_geracao
 
 
 def main():
@@ -251,15 +276,22 @@ def main():
     semente = 11
     taxa_cruzamento = 0.75
     taxa_mutacao = 0.05
-    n_geracoes = 100
+    n_geracoes = 10000
     tam_pop = 100
     torneio_func = torneio
+
+    t1 = time()
+
     pop , apt, melhor_individuo_global, melhor_aptidao_global = evolucao(tam_pop, semente, taxa_cruzamento, taxa_mutacao, n_geracoes, torneio_func, coordenadas)
     
+    t2 = time()
+
     print(
         f"\n\n>>>Melhor solução encontrada é {melhor_individuo_global} com distancia de {(melhor_aptidao_global)}\n\n"
     )
     
+    print(f"tempo de execução {t2 - t1:.10f} segundos")
+
     dict_results = {"semente" : semente,
                     "taxa_de_cruzamento" : taxa_cruzamento,
                     "taxa_de_mutacao" : taxa_mutacao,
@@ -269,7 +301,7 @@ def main():
                     "melhor_aptidao" : melhor_aptidao_global
                     }
 
-    np.savez("arquivo", dict_results)
+    savez("dicionario-de-resultados", dict_results)
 
 if __name__ == "__main__":
     main()
