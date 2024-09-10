@@ -4,8 +4,8 @@ from typing import Any
 from numpy import savez, array
 from time import time
 import matplotlib.pyplot as plt
-import sys
-melhores_aptidoes = []
+from os import mkdir, path
+
 
 def dic_posicoes(dado: str) -> dict[int, tuple[float, float]]:
     """Criar um dicionario das posicoes """
@@ -149,11 +149,11 @@ def mutacao(filhos: list[list[int]], taxa_mutacao: float) -> list[list[int]]:
 
     ]
 
-def elite_individuo(geracao, coordenadas, n_elite):
+def elite_individuo(geracao: list[list[int]], coordenadas: dict[int, tuple[float, float]], n_elite: int) -> list[list[int]]:
+    """Funcao que seleciona os melhores individuos de uma população"""
     melhores_individuos = []
     melhores_aptidao = []
     
-
     for individuo in geracao:
         aptidao_atual = aptidao_individuo(individuo, coordenadas)
         if len(melhores_individuos) < n_elite:
@@ -235,6 +235,37 @@ def imprimir_populacao(pop: list[list[int]], apt: list[float], geracao_i: int) -
     )
     print("*****************************")
 
+def salvar_dicio(path, semente, taxa_cruzamento, taxa_mutacao, tam_pop, n_geracoes, melhor_individuo_global, melhor_aptidao_global):
+    dict_results = {"semente" : semente,
+                    "taxa_de_cruzamento" : taxa_cruzamento,
+                    "taxa_de_mutacao" : taxa_mutacao,
+                    "tamanho_da_populacao" : tam_pop,
+                    "numero_de_geracoes" : n_geracoes,
+                    "melhor_individuo" : melhor_individuo_global,
+                    "melhor_aptidao" : melhor_aptidao_global
+                    }
+
+    savez(f"{path}\\dicio-tx-mutacao-{taxa_mutacao}-tx-cruz-{taxa_cruzamento}", a=dict_results)
+
+    return
+
+def gerar_grafico(n_geracoes, melhores_aptidoes, semente, path_1, taxa_mutacao, taxa_cruzamento):
+    nome_grafico = f'{path_1}\\graf-AG-semente-{semente}-tx_muta-{taxa_mutacao}-tx_cruz-{taxa_cruzamento}'
+    plt.plot(range(n_geracoes), melhores_aptidoes)
+    plt.xlabel("Geração")
+    plt.ylabel("Melhor Aptidão")
+    plt.title("Evolução da Melhor Aptidão")
+    plt.grid(True)
+    plt.savefig(f"{nome_grafico}.png")
+    #plt.show()
+    return
+
+def gerar_path(semente):
+    path1 = path.join(f"semente-{semente}")
+    if not path.exists(path1):
+        mkdir(path1)
+    return path1
+
 def evolucao(
     tam_pop: int,
     semente: int,
@@ -249,7 +280,8 @@ def evolucao(
     apt = aptidao(pop, coordenadas) 
     melhor_aptidao_global = valor_minimo(apt)
     melhor_individuo_global = pop[apt.index(melhor_aptidao_global)]
-    
+    melhores_aptidoes = []
+
     for geracao in range(n_geracoes):
         imprimir_populacao(pop, apt, geracao)
         
@@ -268,15 +300,9 @@ def evolucao(
         if melhor_aptidao_geracao < melhor_aptidao_global:
             melhor_aptidao_global = melhor_aptidao_geracao
             melhor_individuo_global = pop[apt.index(melhor_aptidao_global)]
-    plt.plot(range(n_geracoes), melhores_aptidoes)
-    plt.xlabel("Geração")
-    plt.ylabel("Melhor Aptidão")
-    plt.title("Evolução da Melhor Aptidão")
-    plt.grid(True)
-    plt.savefig("grafico.png")
-    plt.show()
     
-    return pop, apt, melhor_individuo_global, melhor_aptidao_geracao
+    
+    return pop, apt, melhor_individuo_global, melhor_aptidao_geracao, melhores_aptidoes
 
 
 def main():
@@ -286,31 +312,25 @@ def main():
     taxa_cruzamento = 0.75
     taxa_mutacao = 0.05
     n_geracoes = 10000
-    tam_pop = 100
+    tam_pop = 1000
     torneio_func = torneio
-    
+    pathdir = gerar_path(semente)
+
     t1 = time()
 
-    pop , apt, melhor_individuo_global, melhor_aptidao_global = evolucao(tam_pop, semente, taxa_cruzamento, taxa_mutacao, n_geracoes, torneio_func, coordenadas)
+    pop , apt, melhor_individuo_global, melhor_aptidao_global, melhores_aptidoes = evolucao(tam_pop, semente, taxa_cruzamento, taxa_mutacao, n_geracoes, torneio_func, coordenadas)
     
+    gerar_grafico(n_geracoes, melhores_aptidoes, semente, pathdir, taxa_mutacao, taxa_cruzamento)
+    salvar_dicio(pathdir, semente, taxa_cruzamento, taxa_mutacao, tam_pop, n_geracoes, melhor_individuo_global, melhor_aptidao_global)
+
     t2 = time()
 
     print(
         f"\n\n>>>Melhor solução encontrada é {melhor_individuo_global} com distancia de {(melhor_aptidao_global)}\n\n"
     )
     
-    print(f"tempo de execução {t2 - t1:.10f} segundos")
-
-    dict_results = {"semente" : semente,
-                    "taxa_de_cruzamento" : taxa_cruzamento,
-                    "taxa_de_mutacao" : taxa_mutacao,
-                    "tamanho_da_populacao" : tam_pop,
-                    "numero_de_geracoes" : n_geracoes,
-                    "melhor_individuo" : melhor_individuo_global,
-                    "melhor_aptidao" : melhor_aptidao_global
-                    }
-
-    savez("dicionario-de-resultados", dict_results)
+    print(f"tempo de execução {t2 - t1:.5f} segundos")
+    
 
 if __name__ == "__main__":
     main()
