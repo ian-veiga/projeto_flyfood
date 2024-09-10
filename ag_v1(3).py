@@ -173,16 +173,18 @@ def elite_individuo(geracao: list[list[int]], coordenadas: dict[int, tuple[float
 def torneio(geracao: list[list[int]], coordenadas: dict[int, tuple[float, float]]) -> list[list[int]]:
     """Seleciona sobreviventes usando torneio e elitismo."""
     sobreviventes = []
-    pressao_sel = uniform(0.01, 0.03)  
+    geracao_copy = geracao.copy()
+    pressao_sel = uniform(0.01, 0.03)
     n_elite = int(len(geracao) * pressao_sel)
     n_aleat_sobrev = 50 - n_elite
     """Elitismo"""
-    melhores_individuos = elite_individuo(geracao, coordenadas, n_elite)    
+    melhores_individuos = elite_individuo(geracao_copy, coordenadas, n_elite)
     sobreviventes += melhores_individuos
-
+    
     """Torneio"""
     for _ in range(n_aleat_sobrev):
-        competidores = [geracao[randint(0, len(geracao) - 1)] for _ in range(3)] # Seleciona 3 indivíduos aleatórios para o torneio
+        competidores = [geracao_copy[randint(0, len(geracao_copy) - 1)] for _ in range(3)] 
+        
         melhor = competidores[0]
         melhor_aptidao = aptidao_individuo(melhor, coordenadas)
 
@@ -191,6 +193,7 @@ def torneio(geracao: list[list[int]], coordenadas: dict[int, tuple[float, float]
             if aptidao_competidor < melhor_aptidao:
                 melhor = competidor
                 melhor_aptidao = aptidao_competidor
+        
         
         sobreviventes.append(melhor)
 
