@@ -77,8 +77,8 @@ def pmx(pai1, pai2, taxa_de_cruzamento):
     
     return filho1, filho2
 
-def mutacao_2opt(caminho, taxa_mutacao):
-    """Função de mutação (2-opt)"""
+def mutacao(caminho, taxa_mutacao):
+    """Função de mutação"""
     filho_mutado = caminho.copy()
     tam = len(caminho)
     if random.random() <= taxa_mutacao:
@@ -191,7 +191,7 @@ def pso_tsp(coordenadas, num_particulas, num_iteracoes, taxa_de_mutacao, taxa_de
             taxa_crossover = valor_minimo([1, velocidades[i]])
             nova_particula, _ = pmx(pai1, pai2, taxa_crossover)
             
-            nova_particula = mutacao_2opt(nova_particula, taxa_de_mutacao)
+            nova_particula = mutacao(nova_particula, taxa_de_mutacao)
             
             if aptidao(nova_particula, coordenadas) < aptidao_local:
                 particulas[i] = nova_particula
