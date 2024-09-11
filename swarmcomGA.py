@@ -1,6 +1,8 @@
 import random
 import numpy as np
 from typing import Any
+import matplotlib.pyplot as plt
+from os import mkdir, path
 
 def dic_posicoes(dado: str) -> dict[int, tuple[float, float]]:
     """Criar um dicinario das posicoes """
@@ -102,20 +104,68 @@ def encontrar_melhor(particulas, coordenadas):
             melhor_aptidao = aptidao_atual
     return melhor_particula
 
-def calcular_velocidade(velocidade_atual, vmax, dBLS, dBGS, c1=0.7, c2=0.3):
-    """Atualiza a velocidade da partícula com base nas distâncias BLS e BGS"""
+def adicionar(lista):
+    dist_valor = 0
+    for item in lista:
+        dist_valor += item
+    
+    return dist_valor
+
+def calcular_diferenca_rotas(rota1, rota2):
+    """Calcula a diferença entre duas rotas em termos de número de cidades em posições diferentes."""
+    diferenca = adicionar([1 for i in range(len(rota1)) if rota1[i] != rota2[i]])
+    return diferenca
+
+def calcular_velocidade(velocidade_atual, vmax, particula, bls, bgs, c1=0.7, c2=0.3):
+    """Atualiza a velocidade da partícula com base nas diferenças de rota com BLS e BGS."""
     r1, r2 = random.random(), random.random()
-    velocidade_nova = c1 * r1 * dBLS + c2 * r2 * dBGS
-    return valor_minimo([velocidade_nova, velocidade_atual, vmax]) # Adicionar a vel atual
+    
+    delta_BLS = calcular_diferenca_rotas(particula, bls)
+    delta_BGS = calcular_diferenca_rotas(particula, bgs)
+    
+    velocidade_nova = velocidade_atual + c1 * r1 *  delta_BLS + c2 * r2 *  delta_BGS
+    
+    return valor_minimo([velocidade_nova, vmax])
 
 def valor_minimo(lista: list[Any]) -> tuple[Any, int]:
     """Retorna o valor minimo de uma lista"""
-    valor_min =int(10000000000000000000000000000)
+    valor_min = int(10000000000000000000000000000)
     for valor in lista:
         if valor < valor_min :
             valor_min = valor
     
     return valor_min
+
+def salvar_dicio(path, semente, taxa_cruzamento, taxa_mutacao, tam_pop, n_geracoes, melhor_individuo_global, melhor_aptidao_global):
+    dict_results = {"semente" : semente,
+                    "taxa_de_cruzamento" : taxa_cruzamento,
+                    "taxa_de_mutacao" : taxa_mutacao,
+                    "tamanho_da_populacao" : tam_pop,
+                    "numero_de_iteracoes" : n_geracoes,
+                    "melhor_individuo" : melhor_individuo_global,
+                    "melhor_aptidao" : melhor_aptidao_global
+                    }
+
+    np.savez(f"{path}\\dicio-HIB-tx-mutacao-{taxa_mutacao}-tx-cruz-{taxa_cruzamento}", a=dict_results)
+
+    return
+
+def gerar_grafico(n_geracoes, melhores_aptidoes, semente, path_1, taxa_mutacao, taxa_cruzamento):
+    nome_grafico = f'{path_1}\\graf-HIB-semente-{semente}-tx_muta-{taxa_mutacao}-tx_cruz-{taxa_cruzamento}'
+    plt.plot(range(n_geracoes), melhores_aptidoes)
+    plt.xlabel("Iterações")
+    plt.ylabel("Melhor Aptidão")
+    plt.title("Evolução da Melhor Aptidão")
+    plt.grid(True)
+    plt.savefig(f"{nome_grafico}.png")
+    #plt.show()
+    return
+
+def gerar_path(semente):
+    path1 = path.join(f"Swarm-semente-{semente}")
+    if not path.exists(path1):
+        mkdir(path1)
+    return path1
 
 def pso_tsp(coordenadas, num_particulas, num_iteracoes, taxa_de_mutacao, taxa_de_cruzamento, vmax=0.1):
     """PSO para o problema do caixeiro viajante, incluindo PMX e colisão"""
@@ -125,6 +175,7 @@ def pso_tsp(coordenadas, num_particulas, num_iteracoes, taxa_de_mutacao, taxa_de
     particulas = [shuffler(cidades.copy(), len(cidades)) for _ in range(num_particulas)]
     melhores_locais = particulas.copy()
     melhor_global = encontrar_melhor(melhores_locais, coordenadas)
+    melhores_aptidoes = []
 
     velocidades = [random.uniform(0, vmax) for _ in range(num_particulas)]
     
@@ -133,13 +184,12 @@ def pso_tsp(coordenadas, num_particulas, num_iteracoes, taxa_de_mutacao, taxa_de
             aptidao_local = aptidao(particulas[i], coordenadas)
             aptidao_BLS = aptidao(melhores_locais[i], coordenadas)
             aptidao_BLG = aptidao(melhor_global, coordenadas)
-            dBLS = aptidao_local - aptidao_BLS
-            dBGS = aptidao_local - aptidao_BLG
             
-            velocidades[i] = calcular_velocidade(velocidades[i], vmax, dBLS, dBGS)
+            velocidades[i] = calcular_velocidade(velocidades[i], vmax, particulas[i], melhores_locais[i], melhor_global)
 
             pai1, pai2 = particulas[i], melhor_global
-            nova_particula, _ = pmx(pai1, pai2, taxa_de_cruzamento)
+            taxa_crossover = valor_minimo([1, velocidades[i]])
+            nova_particula, _ = pmx(pai1, pai2, taxa_crossover)
             
             nova_particula = mutacao_2opt(nova_particula, taxa_de_mutacao)
             
@@ -150,10 +200,11 @@ def pso_tsp(coordenadas, num_particulas, num_iteracoes, taxa_de_mutacao, taxa_de
                 melhores_locais[i] = particulas[i]
             if aptidao_local < aptidao_BLG:
                 melhor_global = particulas[i]
-                
+        
+        melhores_aptidoes.append(aptidao_BLG)
         print(f"Iteração {iteracao + 1}, Melhor distância global: {aptidao_BLG}")
     
-    return melhor_global, aptidao_BLG
+    return melhor_global, aptidao_BLG, melhores_aptidoes
 
 def main():
     semente = 10
@@ -163,7 +214,10 @@ def main():
     n_iteracoes = 1000
     taxa_mutacao = 0.05
     taxa_cruzamento = 0.75
-    melhor_caminho, melhor_distancia = pso_tsp(coord, n_particulas, n_iteracoes, taxa_mutacao, taxa_cruzamento)
+    path1 = gerar_path(semente)
+    melhor_caminho, melhor_distancia, melhores_caminhos = pso_tsp(coord, n_particulas, n_iteracoes, taxa_mutacao, taxa_cruzamento)
+    gerar_grafico(n_iteracoes, melhores_caminhos, semente, path1, taxa_mutacao, taxa_cruzamento)
+    salvar_dicio(path1,semente,taxa_cruzamento,taxa_mutacao, n_particulas, n_iteracoes, melhor_caminho, melhor_distancia)
     print(f"Melhor caminho encontrado: {melhor_caminho} com distância total de {melhor_distancia}")
 
 if __name__ == '__main__':
